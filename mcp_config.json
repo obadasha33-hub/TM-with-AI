@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://supabase.com/dashboard",
+      "apiKey": ""
+    },
+    "mem0": {
+      "url": "https://api.mem0.ai",
+      "apiKey": "m0-placeholder-key"
+    },
+    "exa": {
+      "url": "https://api.exa.ai",
+      "apiKey": "exa-placeholder-key"
+    },
+    "firecrawl": {
+      "url": "https://api.firecrawl.dev",
+      "apiKey": "fc-placeholder-key"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "short_name": "TM with AI",
+  "name": "TM with AI - Intelligent Productivity Hub",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#08070a",
+  "theme_color": "#a855f7",
+  "display": "standalone",
+  "orientation": "portrait"
+}
