@@ -930,12 +930,21 @@ app.post('/api/mcp/memories', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
-// SERVER LISTEN
+// SERVER LISTEN / EXPORT
 // ----------------------------------------------------
-db.initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`TM with AI Server running on http://localhost:${PORT}`);
+module.exports = app;
+
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  db.initDb().then(() => {
+    app.listen(PORT, () => {
+      console.log(`TM with AI Server running on http://localhost:${PORT}`);
+    });
+  }).catch(err => {
+    console.error('Database startup failed:', err);
   });
-}).catch(err => {
-  console.error('Database startup failed:', err);
-});
+} else {
+  // In serverless environment, initialize DB immediately
+  db.initDb().catch(err => {
+    console.error('Database initialization failed:', err);
+  });
+}
