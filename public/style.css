@@ -2560,6 +2560,10 @@ img, svg { display: block; }
 /* ============================================================
    28. MOBILE BOTTOM NAVIGATION & PWA LAYOUTS
    ============================================================ */
+.mobile-header {
+  display: none;
+}
+
 .mobile-bottom-nav {
   display: none;
 }
@@ -2573,9 +2577,81 @@ img, svg { display: block; }
     display: none !important;
   }
   
+  .mobile-header {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: var(--bg-sidebar);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-subtle);
+    z-index: 999;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1.25rem;
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);
+  }
+  
+  .mobile-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .mobile-header-brand .logo-text {
+    font-size: 1.15rem;
+    font-weight: 800;
+    font-family: var(--font-title);
+    letter-spacing: -0.02em;
+    color: var(--text-main);
+  }
+  
+  .mobile-header-brand .logo-text .accent-text {
+    background: var(--grad-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .mobile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .mobile-action-btn {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    width: 38px;
+    height: 38px;
+    border-radius: var(--r-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--t-fast);
+  }
+  
+  .mobile-action-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .mobile-action-btn.logout:hover {
+    color: var(--clr-secondary);
+    background: rgba(236, 72, 153, 0.08);
+    border-color: rgba(236, 72, 153, 0.2);
+  }
+  
   .main-content {
-    margin-bottom: 70px; /* Leave space for bottom nav */
-    padding: 1rem 1rem 4rem 1rem !important;
+    margin-top: 60px !important;
+    margin-bottom: 70px !important;
+    padding: 1.25rem 1rem 4rem 1rem !important;
   }
   
   .mobile-bottom-nav {

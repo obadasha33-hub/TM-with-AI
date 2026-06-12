@@ -124,6 +124,16 @@ function setupEventListeners() {
       switchTab(tab);
     });
   });
+
+  // Mobile Header Actions
+  document.getElementById('mobile-hdr-search')?.addEventListener('click', () => {
+    switchTab('search');
+  });
+  document.getElementById('mobile-hdr-settings')?.addEventListener('click', () => {
+    initSettingsModal();
+    openModal('modal-settings');
+  });
+  document.getElementById('mobile-hdr-logout')?.addEventListener('click', logout);
   
   // Settings Button
   if (settingsBtn) settingsBtn.addEventListener('click', () => {
@@ -211,7 +221,7 @@ function setAuthState(token, name, email) {
 }
 
 function logout() {
-  showConfirm('Are you sure you want to sign out?', async () => {
+  showConfirm(t('logout_confirm_msg'), async () => {
     state.token = '';
     state.userName = '';
     state.userEmail = '';
