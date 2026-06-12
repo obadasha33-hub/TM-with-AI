@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
@@ -36,6 +37,20 @@
           <span class="logo-text">TM <span class="accent-text">with AI</span></span>
         </div>
         <p class="auth-subtitle">Your Intelligent Time & Productivity Planner</p>
+      </div>
+
+      <!-- Cloudflare Turnstile Verification -->
+      <div id="cf-turnstile-container" class="cf-turnstile-box" style="margin-top: 1rem;">
+        <div style="text-align: center; padding: 1rem 0;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.8rem; filter: drop-shadow(0 0 12px var(--glow-primary));">🛡️</div>
+          <h3 style="margin-bottom: 0.5rem; font-family: var(--font-title); font-size: 1.25rem; font-weight: 800;" data-i18n="cf_verify_title">Security Check</h3>
+          <p style="color: var(--text-muted); font-size: 0.88rem; max-width: 290px; margin: 0 auto 1.5rem; line-height: 1.6;" data-i18n="cf_verify_desc">
+            Please complete the verification below to access your dashboard.
+          </p>
+          <div style="display: flex; justify-content: center; align-items: center; min-height: 65px;">
+            <div class="cf-turnstile" id="cf-turnstile-widget" data-sitekey="1x00000000000000000000AA" data-callback="onTurnstileSuccess"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Clerk Authentication Container -->

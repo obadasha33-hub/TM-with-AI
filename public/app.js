@@ -16,6 +16,7 @@ let state = {
   useClerk: false,
   clerkPublishableKey: '',
   hasGemini: false,
+  turnstilePassed: false,
   settings: {
     aiTone: localStorage.getItem('tmai_ai_tone') || 'unrestricted',
     soundAlerts: localStorage.getItem('tmai_sound_alerts') !== 'false',
@@ -246,13 +247,28 @@ function showAuth() {
   authScreen.classList.remove('hidden');
   appContainer.classList.add('hidden');
 
+  const turnstileContainer = document.getElementById('cf-turnstile-container');
   const clerkContainer = document.getElementById('clerk-auth-container');
-  clerkContainer.classList.remove('hidden');
 
+  if (state.turnstilePassed) {
+    if (turnstileContainer) turnstileContainer.classList.add('hidden');
+    if (clerkContainer) {
+      clerkContainer.classList.remove('hidden');
+      mountClerkSignIn(clerkContainer);
+    }
+  } else {
+    if (turnstileContainer) turnstileContainer.classList.remove('hidden');
+    if (clerkContainer) clerkContainer.classList.add('hidden');
+    // Reset Turnstile widget if loaded
+    if (window.turnstile) {
+      try { window.turnstile.reset(); } catch (_) {}
+    }
+  }
+}
+
+function mountClerkSignIn(clerkContainer) {
   if (window.Clerk) {
-    // Unmount any previous Clerk instance before re-mounting to avoid double-mount errors
     try { window.Clerk.unmountSignIn(clerkContainer); } catch (_) {}
-
     window.Clerk.mountSignIn(clerkContainer, {
       appearance: {
         variables: {
@@ -267,7 +283,6 @@ function showAuth() {
       }
     });
   } else {
-    // Show configuration prompt if Clerk failed to load
     clerkContainer.innerHTML = `
       <div style="text-align: center; padding: 2.5rem; color: var(--text-main);">
         <div style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
@@ -282,6 +297,12 @@ function showAuth() {
     `;
   }
 }
+
+// Cloudflare Turnstile Success Callback
+window.onTurnstileSuccess = function(token) {
+  state.turnstilePassed = true;
+  showAuth();
+};
 
 function showApp() {
   authScreen.classList.add('hidden');
@@ -1794,7 +1815,9 @@ const translations = {
     ai_mem_clear_confirm: "Are you sure you want to clear all remembered facts about yourself? This will reset the AI's personalization.",
     ai_mem_clear_success_title: "Memories Cleared",
     ai_mem_clear_success_desc: "AI personalized memories have been reset.",
-    toast_error: "Error"
+    toast_error: "Error",
+    cf_verify_title: "Security Check",
+    cf_verify_desc: "Please complete the verification below to access your dashboard."
   },
   ar: {
     nav_overview: "نظرة عامة",
@@ -1915,7 +1938,9 @@ const translations = {
     ai_mem_clear_confirm: "هل أنت متأكد من رغبتك في مسح كل المعلومات والتفضيلات المحفوظة عنك؟ سيؤدي هذا لمحو التخصيص التلقائي لمساعد الذكاء الاصطناعي.",
     ai_mem_clear_success_title: "تم مسح الذاكرة",
     ai_mem_clear_success_desc: "تمت إعادة تعيين تفضيلات الذكاء الاصطناعي.",
-    toast_error: "خطأ"
+    toast_error: "خطأ",
+    cf_verify_title: "التحقق الأمني",
+    cf_verify_desc: "يرجى إكمال التحقق الأمني أدناه للوصول إلى لوحة التحكم الخاصة بك."
   }
 };
 

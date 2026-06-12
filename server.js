@@ -756,9 +756,10 @@ function getLocalMockAIResponse(message, tasks, schedules, memory) {
     return `Here is a productivity tip for you:\n\n${randomTip}\n\nWould you like me to block out some time on your calendar right now to implement this?`;
   }
 
-  // Default smart conversation rotation
   const defaults = [
-    `I'm here to support you! I see you have **${activeCount}** tasks remaining. Would you like me to prioritize them for you, or set a quick reminder?`,
+    activeCount > 0 
+      ? `I'm here to support you! I see you have **${activeCount}** tasks remaining. Let me know if you would like me to prioritize them or help organize your day.`
+      : `I'm here to support you! Your task list is currently clear. Let me know if you'd like to create a new task or habit together.`,
     `Focus is key. Currently, your top task is **"${activeTasks[0]?.title || 'none'}"**. I recommend dedicating a 1-hour calendar slot to it. Should I schedule that block?`,
     `Time management is the key to progress! Feel free to ask me: *"What are my tasks?"*, *"Remind me to take a break in 30 minutes"*, or *"What can you do?"* to get started.`,
     `Hello! Just checking in on your productivity. You have checked off **${doneCount}** habits and tasks today. Keep up the momentum!`
