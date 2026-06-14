@@ -1,114 +1,149 @@
 const path = require('path');
 
-const usePostgres = !!process.env.DATABASE_URL;
+let usePostgres = !!process.env.DATABASE_URL;
 let db;
 
 async function initDb() {
   if (usePostgres) {
-    const { Pool } = require('pg');
-    db = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    });
+    try {
+      const { Pool } = require('pg');
+      db = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+          rejectUnauthorized: false
+        }
+      });
 
-    const client = await db.connect();
-    console.log('Connected to Supabase PostgreSQL database successfully.');
-    client.release();
+      const client = await db.connect();
+      console.log('Connected to Supabase PostgreSQL database successfully.');
+      client.release();
 
-    // Create Tables
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      // Create Tables
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        description TEXT,
-        status VARCHAR(50) DEFAULT 'todo',
-        priority VARCHAR(50) DEFAULT 'medium',
-        category VARCHAR(100),
-        due_date VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          status VARCHAR(50) DEFAULT 'todo',
+          priority VARCHAR(50) DEFAULT 'medium',
+          category VARCHAR(100),
+          due_date VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS schedules (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
-        title VARCHAR(255) NOT NULL,
-        start_time VARCHAR(100) NOT NULL,
-        end_time VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS schedules (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          title VARCHAR(255) NOT NULL,
+          start_time VARCHAR(100) NOT NULL,
+          end_time VARCHAR(100) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS reminders (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
-        message VARCHAR(255) NOT NULL,
-        remind_time VARCHAR(100) NOT NULL,
-        is_sent INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS reminders (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          message VARCHAR(255) NOT NULL,
+          remind_time VARCHAR(100) NOT NULL,
+          is_sent INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS habits (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS habits (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS habit_logs (
-        id SERIAL PRIMARY KEY,
-        habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
-        date VARCHAR(100) NOT NULL,
-        status INTEGER NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT habit_date_unique UNIQUE(habit_id, date)
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS habit_logs (
+          id SERIAL PRIMARY KEY,
+          habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+          date VARCHAR(100) NOT NULL,
+          status INTEGER NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT habit_date_unique UNIQUE(habit_id, date)
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS ai_memory (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        key VARCHAR(255) NOT NULL,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT user_key_unique UNIQUE(user_id, key)
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS ai_memory (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          key VARCHAR(255) NOT NULL,
+          value TEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT user_key_unique UNIQUE(user_id, key)
+        );
+      `);
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS chat_history (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        sender VARCHAR(50) NOT NULL,
-        message TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS chat_history (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          sender VARCHAR(50) NOT NULL,
+          message TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
-  } else {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS banned_ips (
+          ip VARCHAR(255) PRIMARY KEY,
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS user_fingerprints (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          fingerprint VARCHAR(255) NOT NULL,
+          user_agent TEXT,
+          ip VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS security_alerts (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          alert_type VARCHAR(255) NOT NULL,
+          description TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    } catch (err) {
+      console.error('Failed to connect to Supabase PostgreSQL. Falling back to local SQLite...', err);
+      usePostgres = false;
+    }
+  }
+
+  if (!usePostgres) {
     const sqlite3 = require('sqlite3');
     const { open } = require('sqlite');
     const dbPath = path.join(__dirname, 'database.db');
@@ -213,6 +248,37 @@ async function initDb() {
         user_id INTEGER NOT NULL,
         sender TEXT NOT NULL,
         message TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS banned_ips (
+        ip TEXT PRIMARY KEY,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS user_fingerprints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        fingerprint TEXT NOT NULL,
+        user_agent TEXT,
+        ip TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS security_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        alert_type TEXT NOT NULL,
+        description TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
       );
@@ -464,6 +530,41 @@ async function clearAIMemory(userId) {
   await runCmd('DELETE FROM ai_memory WHERE user_id = ?', [userId]);
 }
 
+// Security helper methods
+async function banIp(ip, reason) {
+  if (usePostgres) {
+    await runCmd(
+      'INSERT INTO banned_ips (ip, reason) VALUES ($1, $2) ON CONFLICT (ip) DO UPDATE SET reason = EXCLUDED.reason',
+      [ip, reason]
+    );
+  } else {
+    await runCmd('INSERT OR REPLACE INTO banned_ips (ip, reason) VALUES (?, ?)', [ip, reason]);
+  }
+}
+
+async function isIpBanned(ip) {
+  const row = await getOne('SELECT ip FROM banned_ips WHERE ip = ?', [ip]);
+  return !!row;
+}
+
+async function getUserFingerprints(userId) {
+  return await getAll('SELECT fingerprint FROM user_fingerprints WHERE user_id = ?', [userId]);
+}
+
+async function saveUserFingerprint(userId, fingerprint, userAgent, ip) {
+  await runCmd(
+    'INSERT INTO user_fingerprints (user_id, fingerprint, user_agent, ip) VALUES (?, ?, ?, ?)',
+    [userId, fingerprint, userAgent || null, ip || null]
+  );
+}
+
+async function logSecurityAlert(userId, alertType, description) {
+  await runCmd(
+    'INSERT INTO security_alerts (user_id, alert_type, description) VALUES (?, ?, ?)',
+    [userId || null, alertType, description]
+  );
+}
+
 module.exports = {
   initDb,
   getUserByEmail,
@@ -492,5 +593,10 @@ module.exports = {
   getChatHistory,
   saveChatMessage,
   clearChatHistory,
-  clearAIMemory
+  clearAIMemory,
+  banIp,
+  isIpBanned,
+  getUserFingerprints,
+  saveUserFingerprint,
+  logSecurityAlert
 };

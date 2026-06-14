@@ -22,8 +22,122 @@ if (process.env.CLERK_SECRET_KEY) {
 }
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (same-origin, mobile apps, curl, etc.)
+    // and localhost for dev, plus Clerk domains
+    if (!origin ||
+        origin.includes('localhost') || origin.includes('127.0.0.1') ||
+        origin === 'https://cdn.clerk.com' || origin === 'https://challenges.cloudflare.com') {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in dev; tighten for production
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
+
+// 1. Cloudflare Shield & IP Blacklist Check Middleware
+app.use(async (req, res, next) => {
+  const ip = req.headers['cf-connecting-ip'] || req.ip;
+
+  // IP Blacklist check
+  try {
+    const isBanned = await db.isIpBanned(ip);
+    if (isBanned) {
+      console.warn(`[SECURITY] Blocked request from banned IP: ${ip} on path: ${req.path}`);
+      return res.status(403).send('Forbidden: Your IP is banned.');
+    }
+  } catch (err) {
+    console.error('Error checking IP blacklist:', err);
+  }
+
+  // Cloudflare Shield Enforcement (bypass local requests and vercel domains)
+  const isLocal = req.hostname === 'localhost' || req.hostname === '127.0.0.1' || req.hostname.startsWith('192.168.') || req.hostname.endsWith('.vercel.app');
+  if (!isLocal) {
+    const hasCfRay = req.headers['cf-ray'];
+    const hasCfConnectingIp = req.headers['cf-connecting-ip'];
+
+    if (!hasCfRay || !hasCfConnectingIp) {
+      console.warn(`[SECURITY] Blocked direct access attempt from IP: ${ip} to Host: ${req.hostname}`);
+      return res.status(403).send('Forbidden: Direct origin access is blocked. Traffic must route through Cloudflare.');
+    }
+  }
+
+  next();
+});
+
+// 2. Honeypots - Banning malicious bots touching WP / Env / Config files
+const honeypotPaths = [
+  '/wp-admin',
+  '/.env',
+  '/wp-login.php',
+  '/xmlrpc.php',
+  '/config.json',
+  '/backup.sql',
+  '/backup.zip',
+  '/admin/config.php'
+];
+
+honeypotPaths.forEach(honeypotPath => {
+  app.all(honeypotPath, async (req, res) => {
+    const ip = req.headers['cf-connecting-ip'] || req.ip;
+    console.warn(`[SECURITY WARNING] Honeypot hit at ${honeypotPath} from IP: ${ip}. Banning IP immediately.`);
+    try {
+      await db.banIp(ip, `Honeypot path touched: ${honeypotPath}`);
+      await db.logSecurityAlert(null, 'HONEYPOT_HIT', `IP ${ip} touched honeypot path ${honeypotPath}`);
+    } catch (err) {
+      console.error('Failed to log honeypot ban in database:', err);
+    }
+    return res.status(403).send('Banned');
+  });
+});
+
+// Cookie helper function
+function getCookie(req, name) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      list[parts.shift().trim()] = decodeURI(parts.join('='));
+    });
+  }
+  return list[name];
+}
+
+// Protected route for dashboard — serves dashboard.html if user is authenticated (Clerk or local JWT)
+app.get('/dashboard', async (req, res) => {
+  // 1. Check for Clerk session cookie
+  const clerkSession = getCookie(req, '__session');
+  if (clerkSession && process.env.CLERK_SECRET_KEY) {
+    try {
+      await verifyToken(clerkSession, {
+        secretKey: process.env.CLERK_SECRET_KEY,
+        publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      });
+      return res.sendFile(path.join(__dirname, 'dashboard.html'));
+    } catch (err) {
+      console.error('Clerk session verification failed on /dashboard:', err);
+    }
+  }
+
+  // 2. Check for local JWT in Authorization header (for fallback local auth)
+  // Note: SPA handles its own auth via localStorage token; the server just serves
+  // the dashboard HTML when Clerk is not configured or when a local token exists.
+  // For Clerk-configured instances, the __session cookie is the gate.
+  if (!process.env.CLERK_SECRET_KEY) {
+    // No Clerk configured — serve dashboard.html and let client-side handle auth
+    return res.sendFile(path.join(__dirname, 'dashboard.html'));
+  }
+
+  // Clerk is configured but no valid session — redirect to login
+  res.redirect('/');
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Authentication Middleware
@@ -56,6 +170,76 @@ app.get('/api/auth/config', (req, res) => {
     hasGemini: !!(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '')
   });
 });
+
+// Helper for Fingerprint Security, Anomaly, and VPN Heuristics
+async function handleFingerprintSecurity(req, userId) {
+  const { fingerprint, timezone } = req.body;
+  if (!fingerprint) return { isNewDevice: false, vpnDetected: false };
+
+  const ip = req.headers['cf-connecting-ip'] || req.ip;
+  const userAgent = req.headers['user-agent'];
+  const cfCountry = req.headers['cf-ipcountry'];
+
+  let vpnDetected = false;
+  let isNewDevice = false;
+
+  try {
+    // Check timezone consistency (simple heuristic VPN detection)
+    if (timezone && cfCountry && cfCountry !== 'XX' && cfCountry !== 'T1') {
+      const tzLower = timezone.toLowerCase();
+      const countryTzMap = {
+        'US': 'america/',
+        'CA': 'america/',
+        'GB': 'europe/london',
+        'DE': 'europe/',
+        'FR': 'europe/',
+        'IT': 'europe/',
+        'ES': 'europe/',
+        'RU': 'europe/moscow',
+        'AU': 'australia/',
+        'NZ': 'pacific/',
+        'JP': 'asia/tokyo',
+        'CN': 'asia/shanghai',
+        'IN': 'asia/kolkata',
+        'BR': 'america/sao_paulo',
+        'AR': 'america/argentina',
+        'MX': 'america/mexico_city',
+        'SA': 'asia/riyadh',
+        'EG': 'africa/cairo',
+        'ZA': 'africa/johannesburg',
+        'AE': 'asia/dubai'
+      };
+
+      const expectedPrefix = countryTzMap[cfCountry.toUpperCase()];
+      if (expectedPrefix) {
+        if (!tzLower.includes(expectedPrefix)) {
+          vpnDetected = true;
+          await db.logSecurityAlert(userId, 'VPN_DETECTED', `Suspected VPN connection. IP Country is ${cfCountry} but browser timezone is ${timezone}.`);
+        }
+      }
+    }
+
+    // Check device anomaly
+    const existing = await db.getUserFingerprints(userId);
+    if (existing.length > 0) {
+      const match = existing.some(f => f.fingerprint === fingerprint);
+      if (!match) {
+        isNewDevice = true;
+        await db.logSecurityAlert(userId, 'NEW_DEVICE', `User logged in from a new browser/device. Fingerprint: ${fingerprint}. UA: ${userAgent}`);
+      }
+    }
+
+    // Log the current fingerprint
+    const alreadySaved = existing.some(f => f.fingerprint === fingerprint);
+    if (!alreadySaved) {
+      await db.saveUserFingerprint(userId, fingerprint, userAgent, ip);
+    }
+  } catch (err) {
+    console.error('Error processing fingerprint anomaly:', err);
+  }
+
+  return { isNewDevice, vpnDetected };
+}
 
 // POST Clerk Auth Sync
 app.post('/api/auth/clerk-sync', async (req, res) => {
@@ -93,7 +277,8 @@ app.post('/api/auth/clerk-sync', async (req, res) => {
 
     // Generate local JWT
     const localToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token: localToken, name, email });
+    const securityFlags = await handleFingerprintSecurity(req, userId);
+    res.json({ token: localToken, name, email, securityFlags });
   } catch (error) {
     console.error('Clerk token sync failed:', error);
     res.status(401).json({ error: 'Authentication failed' });
@@ -116,8 +301,9 @@ app.post('/api/auth/signup', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = await db.createUser(email, passwordHash, name);
     const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
+    const securityFlags = await handleFingerprintSecurity(req, userId);
 
-    res.status(214).json({ token, name, email }); // Using 201 Created or 200
+    res.status(214).json({ token, name, email, securityFlags }); // Using 214 or 201
   } catch (error) {
     console.error('Sign up error:', error);
     res.status(500).json({ error: 'Internal server error during registration' });
@@ -143,7 +329,8 @@ app.post('/api/auth/signin', async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, name: user.name, email: user.email });
+    const securityFlags = await handleFingerprintSecurity(req, user.id);
+    res.json({ token, name: user.name, email: user.email, securityFlags });
   } catch (error) {
     console.error('Sign in error:', error);
     res.status(500).json({ error: 'Internal server error during authentication' });
@@ -168,7 +355,8 @@ app.post('/api/auth/google', async (req, res) => {
     }
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, name: user.name, email: user.email });
+    const securityFlags = await handleFingerprintSecurity(req, user.id);
+    res.json({ token, name: user.name, email: user.email, securityFlags });
   } catch (error) {
     console.error('Google Auth error:', error);
     res.status(500).json({ error: 'Internal server error during Google Authentication' });
@@ -197,7 +385,8 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
     const tasks = await db.getTasks(req.userId);
     res.json(tasks);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Failed to retrieve tasks' });
   }
 });
 
@@ -206,7 +395,8 @@ app.post('/api/tasks', authenticateToken, async (req, res) => {
     const task = await db.createTask(req.userId, req.body);
     res.status(201).json(task);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: 'Failed to create task' });
   }
 });
 
@@ -215,7 +405,8 @@ app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
     const task = await db.updateTask(req.userId, req.params.id, req.body);
     res.json(task);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error updating task:', error);
+    res.status(500).json({ error: 'Failed to update task' });
   }
 });
 
@@ -224,7 +415,8 @@ app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
     const success = await db.deleteTask(req.userId, req.params.id);
     res.json({ success });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error deleting task:', error);
+    res.status(500).json({ error: 'Failed to delete task' });
   }
 });
 
@@ -236,7 +428,8 @@ app.get('/api/schedules', authenticateToken, async (req, res) => {
     const schedules = await db.getSchedules(req.userId);
     res.json(schedules);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching schedules:', error);
+    res.status(500).json({ error: 'Failed to retrieve schedules' });
   }
 });
 
@@ -245,7 +438,8 @@ app.post('/api/schedules', authenticateToken, async (req, res) => {
     const schedule = await db.createSchedule(req.userId, req.body);
     res.status(201).json(schedule);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error creating schedule:', error);
+    res.status(500).json({ error: 'Failed to create schedule' });
   }
 });
 
@@ -254,7 +448,8 @@ app.put('/api/schedules/:id', authenticateToken, async (req, res) => {
     const schedule = await db.updateSchedule(req.userId, req.params.id, req.body);
     res.json(schedule);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error updating schedule:', error);
+    res.status(500).json({ error: 'Failed to update schedule' });
   }
 });
 
@@ -263,7 +458,8 @@ app.delete('/api/schedules/:id', authenticateToken, async (req, res) => {
     const success = await db.deleteSchedule(req.userId, req.params.id);
     res.json({ success });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error deleting schedule:', error);
+    res.status(500).json({ error: 'Failed to delete schedule' });
   }
 });
 
@@ -275,7 +471,8 @@ app.get('/api/reminders', authenticateToken, async (req, res) => {
     const reminders = await db.getReminders(req.userId);
     res.json(reminders);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching reminders:', error);
+    res.status(500).json({ error: 'Failed to retrieve reminders' });
   }
 });
 
@@ -284,7 +481,8 @@ app.post('/api/reminders', authenticateToken, async (req, res) => {
     const reminder = await db.createReminder(req.userId, req.body);
     res.status(201).json(reminder);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error creating reminder:', error);
+    res.status(500).json({ error: 'Failed to create reminder' });
   }
 });
 
@@ -293,7 +491,8 @@ app.put('/api/reminders/:id/sent', authenticateToken, async (req, res) => {
     await db.markReminderSent(req.userId, req.params.id);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error updating reminder:', error);
+    res.status(500).json({ error: 'Failed to update reminder' });
   }
 });
 
@@ -302,7 +501,8 @@ app.delete('/api/reminders/:id', authenticateToken, async (req, res) => {
     await db.deleteReminder(req.userId, req.params.id);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error deleting reminder:', error);
+    res.status(500).json({ error: 'Failed to delete reminder' });
   }
 });
 
@@ -314,7 +514,8 @@ app.get('/api/habits', authenticateToken, async (req, res) => {
     const habits = await db.getHabits(req.userId);
     res.json(habits);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching habits:', error);
+    res.status(500).json({ error: 'Failed to retrieve habits' });
   }
 });
 
@@ -325,7 +526,8 @@ app.post('/api/habits', authenticateToken, async (req, res) => {
     const habit = await db.createHabit(req.userId, name);
     res.status(201).json(habit);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error creating habit:', error);
+    res.status(500).json({ error: 'Failed to create habit' });
   }
 });
 
@@ -334,7 +536,8 @@ app.delete('/api/habits/:id', authenticateToken, async (req, res) => {
     const success = await db.deleteHabit(req.userId, req.params.id);
     res.json({ success });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error deleting habit:', error);
+    res.status(500).json({ error: 'Failed to delete habit' });
   }
 });
 
@@ -343,7 +546,8 @@ app.get('/api/habits/logs', authenticateToken, async (req, res) => {
     const logs = await db.getHabitLogs(req.userId);
     res.json(logs);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching habit logs:', error);
+    res.status(500).json({ error: 'Failed to retrieve habit logs' });
   }
 });
 
@@ -356,7 +560,8 @@ app.post('/api/habits/log', authenticateToken, async (req, res) => {
     const log = await db.logHabit(habit_id, date, status);
     res.json(log);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error logging habit:', error);
+    res.status(500).json({ error: 'Failed to log habit status' });
   }
 });
 
@@ -370,7 +575,8 @@ app.get('/api/ai/history', authenticateToken, async (req, res) => {
     const history = await db.getChatHistory(req.userId);
     res.json(history);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching AI history:', error);
+    res.status(500).json({ error: 'Failed to retrieve AI history' });
   }
 });
 
@@ -380,7 +586,8 @@ app.delete('/api/ai/history', authenticateToken, async (req, res) => {
     await db.clearChatHistory(req.userId);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error clearing AI history:', error);
+    res.status(500).json({ error: 'Failed to clear AI history' });
   }
 });
 
@@ -390,7 +597,8 @@ app.delete('/api/ai/memory', authenticateToken, async (req, res) => {
     await db.clearAIMemory(req.userId);
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error clearing AI memory:', error);
+    res.status(500).json({ error: 'Failed to clear AI memory' });
   }
 });
 
@@ -790,144 +998,6 @@ function generateLocalMockSchedules(activeTasks) {
 
   return JSON.stringify(list);
 }
-
-// ----------------------------------------------------
-// MCP INTEGRATION ROUTES
-// ----------------------------------------------------
-
-// POST /api/mcp/search  — Exa AI Web Search
-app.post('/api/mcp/search', authenticateToken, async (req, res) => {
-  try {
-    const { query } = req.body;
-    if (!query) return res.status(400).json({ error: 'query is required' });
-
-    const EXA_API_KEY = process.env.EXA_API_KEY;
-    if (!EXA_API_KEY || EXA_API_KEY.includes('placeholder')) {
-      return res.status(503).json({ error: 'Exa API key not configured. Set EXA_API_KEY in .env' });
-    }
-
-    const response = await fetch('https://api.exa.ai/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': EXA_API_KEY
-      },
-      body: JSON.stringify({ query, num_results: 5, use_autoprompt: true })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Exa API error:', data);
-      return res.status(response.status).json({ error: data.error || 'Exa search failed' });
-    }
-
-    res.json({ results: data.results || [] });
-  } catch (error) {
-    console.error('MCP search error:', error);
-    res.status(500).json({ error: 'Internal server error during web search' });
-  }
-});
-
-// POST /api/mcp/scrape  — Firecrawl Web Scraper
-app.post('/api/mcp/scrape', authenticateToken, async (req, res) => {
-  try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: 'url is required' });
-
-    const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-    if (!FIRECRAWL_API_KEY || FIRECRAWL_API_KEY.includes('placeholder')) {
-      return res.status(503).json({ error: 'Firecrawl API key not configured. Set FIRECRAWL_API_KEY in .env' });
-    }
-
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${FIRECRAWL_API_KEY}`
-      },
-      body: JSON.stringify({ url, formats: ['markdown'] })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Firecrawl API error:', data);
-      return res.status(response.status).json({ error: data.error || 'Firecrawl scrape failed' });
-    }
-
-    // Firecrawl returns data.data.markdown for v1
-    const content = (data.data && data.data.markdown) || data.markdown || data.content || '';
-    res.json({ content });
-  } catch (error) {
-    console.error('MCP scrape error:', error);
-    res.status(500).json({ error: 'Internal server error during web scraping' });
-  }
-});
-
-// GET /api/mcp/memories  — Mem0 Fetch Memories
-app.get('/api/mcp/memories', authenticateToken, async (req, res) => {
-  try {
-    const MEM0_API_KEY = process.env.MEM0_API_KEY;
-    if (!MEM0_API_KEY || MEM0_API_KEY.includes('placeholder')) {
-      return res.status(503).json({ error: 'Mem0 API key not configured. Set MEM0_API_KEY in .env' });
-    }
-
-    const userId = req.userId;
-    const response = await fetch(`https://api.mem0.ai/v1/memories/?user_id=${userId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Token ${MEM0_API_KEY}`
-      }
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Mem0 GET error:', data);
-      return res.status(response.status).json({ error: data.error || data.detail || 'Mem0 fetch failed' });
-    }
-
-    res.json({ memories: data });
-  } catch (error) {
-    console.error('MCP memories GET error:', error);
-    res.status(500).json({ error: 'Internal server error fetching memories' });
-  }
-});
-
-// POST /api/mcp/memories  — Mem0 Store Memory
-app.post('/api/mcp/memories', authenticateToken, async (req, res) => {
-  try {
-    const { content } = req.body;
-    if (!content) return res.status(400).json({ error: 'content is required' });
-
-    const MEM0_API_KEY = process.env.MEM0_API_KEY;
-    if (!MEM0_API_KEY || MEM0_API_KEY.includes('placeholder')) {
-      return res.status(503).json({ error: 'Mem0 API key not configured. Set MEM0_API_KEY in .env' });
-    }
-
-    const userId = String(req.userId);
-    const response = await fetch('https://api.mem0.ai/v1/memories/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${MEM0_API_KEY}`
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content }],
-        user_id: userId
-      })
-    });
-
-    const data = await response.json();
-    if (!response.ok) {
-      console.error('Mem0 POST error:', data);
-      return res.status(response.status).json({ error: data.error || data.detail || 'Mem0 store failed' });
-    }
-
-    res.json({ success: true, result: data });
-  } catch (error) {
-    console.error('MCP memories POST error:', error);
-    res.status(500).json({ error: 'Internal server error storing memory' });
-  }
-});
 
 // ----------------------------------------------------
 // SERVER LISTEN / EXPORT

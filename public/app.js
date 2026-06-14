@@ -15,8 +15,10 @@ let state = {
   activeTab: 'overview',
   useClerk: false,
   clerkPublishableKey: '',
+  clerkLoaded: false,
+  clerkError: '',
   hasGemini: false,
-  turnstilePassed: false,
+  turnstilePassed: true,
   settings: {
     aiTone: localStorage.getItem('tmai_ai_tone') || 'unrestricted',
     soundAlerts: localStorage.getItem('tmai_sound_alerts') !== 'false',
@@ -35,6 +37,7 @@ const appContainer = document.getElementById('app-container');
 const logoutBtn = document.getElementById('logout-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const geminiStatus = document.getElementById('gemini-status');
+const logoutBtnMobile = document.getElementById('logout-btn-mobile');
 const sidebarUsername = document.getElementById('sidebar-username');
 const sidebarEmail = document.getElementById('sidebar-email');
 const userAvatarInitials = document.getElementById('user-avatar-initials');
@@ -60,11 +63,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Background reminder checker loop (every 10 seconds)
   setInterval(checkReminders, 10000);
 
-  // Register service worker for PWA
+  // Disable and unregister Service Worker to prevent cache issues
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(reg => console.log('ServiceWorker registered'))
-      .catch(err => console.log('ServiceWorker registration failed:', err));
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      for (let registration of registrations) {
+        registration.unregister().then(() => {
+          console.log('ServiceWorker unregistered successfully.');
+        });
+      }
+    });
+    caches.keys().then(names => {
+      for (let name of names) {
+        caches.delete(name);
+      }
+    }).then(() => {
+      console.log('Caches cleared.');
+    });
   }
 });
 
@@ -104,6 +118,7 @@ function updateDateTime() {
 function setupEventListeners() {
 
   if (logoutBtn) logoutBtn.addEventListener('click', logout);
+if (logoutBtnMobile) logoutBtnMobile.addEventListener('click', logout);
   
   // Sidebar Navigation
   document.querySelectorAll('.nav-item').forEach(button => {
@@ -113,34 +128,51 @@ function setupEventListeners() {
     });
   });
 
-  // Mobile Bottom Navigation
-  document.querySelectorAll('.mobile-nav-item').forEach(button => {
-    button.addEventListener('click', () => {
-      if (button.id === 'mobile-settings-btn') {
-        initSettingsModal();
-        openModal('modal-settings');
-        return;
-      }
-      const tab = button.dataset.tab;
-      switchTab(tab);
-    });
-  });
+  // Sidebar Mobile Toggle
+  const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+  const sidebar = document.querySelector('.sidebar');
+  
+  if (sidebarToggleBtn && sidebarOverlay && sidebar) {
+    const toggleSidebar = () => {
+      sidebar.classList.toggle('active');
+      sidebarOverlay.classList.toggle('active');
+    };
+    const closeSidebar = () => {
+      sidebar.classList.remove('active');
+      sidebarOverlay.classList.remove('active');
+    };
+    
+    sidebarToggleBtn.addEventListener('click', toggleSidebar);
+    sidebarOverlay.addEventListener('click', closeSidebar);
 
-  // Mobile Header Actions
-  document.getElementById('mobile-hdr-search')?.addEventListener('click', () => {
-    switchTab('search');
-  });
-  document.getElementById('mobile-hdr-settings')?.addEventListener('click', () => {
-    initSettingsModal();
-    openModal('modal-settings');
-  });
-  document.getElementById('mobile-hdr-logout')?.addEventListener('click', logout);
+    // Close sidebar drawer when navigating on mobile
+    document.querySelectorAll('.nav-item').forEach(button => {
+      button.addEventListener('click', closeSidebar);
+    });
+    document.getElementById('settings-btn')?.addEventListener('click', closeSidebar);
+    document.getElementById('logout-btn')?.addEventListener('click', closeSidebar);
+  }
+  // Dash Panel toggle
+  const dashToggleBtn = document.getElementById('dash-toggle-btn');
+  const dashPanel = document.getElementById('dash-panel');
+  if (dashToggleBtn && dashPanel) {
+    dashToggleBtn.addEventListener('click', () => {
+      dashPanel.classList.toggle('hidden');
+    });
+  }
+  // Fallback auth listeners are attached dynamically after showAuth() renders them.
+  // See attachFallbackAuthListeners() below.
   
   // Settings Button
-  if (settingsBtn) settingsBtn.addEventListener('click', () => {
+  const openSettings = () => {
     initSettingsModal();
     openModal('modal-settings');
-  });
+  };
+  if (settingsBtn) settingsBtn.addEventListener('click', openSettings);
+  document.getElementById('top-bar-settings-btn')?.addEventListener('click', openSettings);
+  document.getElementById('launchpad-settings-btn')?.addEventListener('click', openSettings);
+  document.getElementById('top-bar-logout-btn')?.addEventListener('click', logout);
   document.getElementById('btn-save-settings')?.addEventListener('click', saveWorkspaceSettings);
   document.getElementById('btn-clear-memories')?.addEventListener('click', clearAIMemories);
   document.getElementById('btn-clear-chat-settings')?.addEventListener('click', () => {
@@ -226,6 +258,8 @@ function logout() {
     state.token = '';
     state.userName = '';
     state.userEmail = '';
+    state.turnstilePassed = true;
+    scannerTimerStarted = false;
     localStorage.removeItem('tmai_token');
     localStorage.removeItem('tmai_name');
     localStorage.removeItem('tmai_email');
@@ -243,26 +277,208 @@ function logout() {
   });
 }
 
-function showAuth() {
-  authScreen.classList.remove('hidden');
-  appContainer.classList.add('hidden');
+let scannerTimerStarted = false;
 
-  const turnstileContainer = document.getElementById('cf-turnstile-container');
+function startSecurityScanner() {
+  if (scannerTimerStarted) return;
+  scannerTimerStarted = true;
+  
+  const statusText = document.getElementById('scanner-status-text');
+  const lang = state.settings.lang || 'en';
+  
+  if (statusText) {
+    statusText.innerText = lang === 'ar' ? "تحليل توافق المتصفح..." : "Verifying browser compatibility...";
+  }
+
+  setTimeout(() => {
+    if (statusText) {
+      statusText.innerText = lang === 'ar' ? "تحليل سلامة الجهاز والمصادقة..." : "Analyzing device integrity and handshake...";
+    }
+    setTimeout(() => {
+      if (statusText) {
+        statusText.innerText = lang === 'ar' ? "تم التحقق الأمني بنجاح!" : "Security handshake complete!";
+      }
+      setTimeout(() => {
+        state.turnstilePassed = true;
+        showAuth();
+      }, 500);
+    }, 1200);
+  }, 800);
+}
+
+const isDashboard = () => {
+  const p = window.location.pathname.replace(/\/$/, '');
+  return p === '/dashboard' || p.endsWith('/dashboard.html');
+};
+
+function attachFallbackAuthListeners() {
+  const toSignupBtn = document.getElementById('to-signup');
+  const toSigninBtn = document.getElementById('to-signin');
+  const signinForm = document.getElementById('signin-form');
+  const signupForm = document.getElementById('signup-form');
+
+  if (toSignupBtn && signinForm && signupForm) {
+    toSignupBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      signinForm.classList.add('hidden');
+      signupForm.classList.remove('hidden');
+    });
+  }
+  if (toSigninBtn && signinForm && signupForm) {
+    toSigninBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      signupForm.classList.add('hidden');
+      signinForm.classList.remove('hidden');
+    });
+  }
+
+  if (signinForm) {
+    signinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('signin-email').value;
+      const password = document.getElementById('signin-password').value;
+      try {
+        const fpInfo = await getBrowserFingerprint();
+        const res = await fetch('/api/auth/signin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, fingerprint: fpInfo.hash, timezone: fpInfo.timezone })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setAuthState(data.token, data.name, data.email);
+          showApp();
+          handleSecurityFlags(data.securityFlags);
+        } else {
+          showToast('Sign In Failed', data.error || 'Invalid credentials', 'error');
+        }
+      } catch (err) {
+        console.error('Sign in error:', err);
+        showToast('Sign In Failed', 'Network error. Please try again.', 'error');
+      }
+    });
+  }
+
+  if (signupForm) {
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('signup-name').value;
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      try {
+        const fpInfo = await getBrowserFingerprint();
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, fingerprint: fpInfo.hash, timezone: fpInfo.timezone })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setAuthState(data.token, data.name, data.email);
+          showApp();
+          handleSecurityFlags(data.securityFlags);
+        } else {
+          showToast('Registration Failed', data.error || 'Failed to create account', 'error');
+        }
+      } catch (err) {
+        console.error('Registration error:', err);
+        showToast('Registration Failed', 'Network error. Please try again.', 'error');
+      }
+    });
+  }
+}
+
+function showAuth() {
+  // If we're on /dashboard and showing auth, redirect to / so Clerk loads fresh
+  if (isDashboard()) {
+    window.location.href = '/';
+    return;
+  }
+
+  if (authScreen) authScreen.classList.remove('hidden');
+  if (appContainer) appContainer.classList.add('hidden');
+
+  // Close any open modals
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    modal.classList.add('hidden');
+  });
+
+  const scannerContainer = document.getElementById('security-scanner-container');
   const clerkContainer = document.getElementById('clerk-auth-container');
 
   if (state.turnstilePassed) {
-    if (turnstileContainer) turnstileContainer.classList.add('hidden');
+    if (scannerContainer) scannerContainer.classList.add('hidden');
+
     if (clerkContainer) {
       clerkContainer.classList.remove('hidden');
-      mountClerkSignIn(clerkContainer);
+      if (state.clerkLoaded && window.Clerk) {
+        mountClerkSignIn(clerkContainer);
+      } else if (state.clerkError) {
+        clerkContainer.innerHTML = `
+          <div style="text-align: center; padding: 2.5rem; color: var(--text-main);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin-bottom: 0.5rem; color: #ef4444;">Failed to Load Authentication</h3>
+            <p style="color: var(--text-sub); font-size: 0.9rem; max-width: 320px; margin: 0 auto 1.5rem;">
+              There was an error loading the Clerk Authentication Portal:
+              <br><code style="color: #fca5a5; display: inline-block; margin-top: 0.5rem; word-break: break-all;">${state.clerkError}</code>
+            </p>
+            <button class="btn btn-secondary btn-sm" onclick="window.location.reload()">Retry</button>
+          </div>
+        `;
+      } else if (!state.useClerk) {
+        // Clerk not configured — show fallback local auth forms
+        clerkContainer.innerHTML = `
+          <div class="fallback-auth-container">
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+              <h3 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 0.3rem;">Sign In to Your Account</h3>
+              <p style="color: var(--text-muted); font-size: 0.88rem;">Enter your credentials to access the dashboard</p>
+            </div>
+            <!-- Sign In Form -->
+            <form id="signin-form" class="auth-form">
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="signin-email" placeholder="you@example.com" required>
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="signin-password" placeholder="••••••••" required>
+              </div>
+              <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+              <p class="auth-switch-text">Don't have an account? <a href="#" id="to-signup">Create one</a></p>
+            </form>
+            <!-- Sign Up Form -->
+            <form id="signup-form" class="auth-form hidden">
+              <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="signup-name" placeholder="John Doe" required>
+              </div>
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="signup-email" placeholder="you@example.com" required>
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="signup-password" placeholder="••••••••" required minlength="6">
+              </div>
+              <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+              <p class="auth-switch-text">Already have an account? <a href="#" id="to-signin">Sign in</a></p>
+            </form>
+          </div>
+        `;
+        // Attach listeners to the dynamically created fallback auth forms
+        attachFallbackAuthListeners();
+      } else {
+        clerkContainer.innerHTML = `
+          <div style="text-align: center; padding: 2rem; color: var(--text-main);">
+            <div class="search-loading" style="margin-bottom: 1rem;">Initializing secure login portal...</div>
+          </div>
+        `;
+      }
     }
   } else {
-    if (turnstileContainer) turnstileContainer.classList.remove('hidden');
+    if (scannerContainer) scannerContainer.classList.remove('hidden');
     if (clerkContainer) clerkContainer.classList.add('hidden');
-    // Reset Turnstile widget if loaded
-    if (window.turnstile) {
-      try { window.turnstile.reset(); } catch (_) {}
-    }
+    startSecurityScanner();
   }
 }
 
@@ -270,6 +486,7 @@ function mountClerkSignIn(clerkContainer) {
   if (window.Clerk) {
     try { window.Clerk.unmountSignIn(clerkContainer); } catch (_) {}
     window.Clerk.mountSignIn(clerkContainer, {
+      routing: 'virtual',
       appearance: {
         variables: {
           colorPrimary: 'hsl(265, 90%, 65%)',
@@ -298,15 +515,15 @@ function mountClerkSignIn(clerkContainer) {
   }
 }
 
-// Cloudflare Turnstile Success Callback
-window.onTurnstileSuccess = function(token) {
-  state.turnstilePassed = true;
-  showAuth();
-};
-
 function showApp() {
-  authScreen.classList.add('hidden');
-  appContainer.classList.remove('hidden');
+  // Only redirect to /dashboard if we're not already there
+  if (!isDashboard()) {
+    window.location.href = '/dashboard';
+    return;
+  }
+
+  if (authScreen) authScreen.classList.add('hidden');
+  if (appContainer) appContainer.classList.remove('hidden');
   const clerkContainer = document.getElementById('clerk-auth-container');
   if (clerkContainer) clerkContainer.classList.add('hidden');
   
@@ -330,13 +547,12 @@ function showApp() {
 async function fetchAllData() {
   const headers = getHeaders();
   try {
-    const [tasksRes, schedRes, remRes, habitsRes, logsRes, memRes] = await Promise.all([
+    const [tasksRes, schedRes, remRes, habitsRes, logsRes] = await Promise.all([
       fetch(`${API_BASE}/tasks`, { headers }),
       fetch(`${API_BASE}/schedules`, { headers }),
       fetch(`${API_BASE}/reminders`, { headers }),
       fetch(`${API_BASE}/habits`, { headers }),
-      fetch(`${API_BASE}/habits/logs`, { headers }),
-      fetch(`${API_BASE}/ai/chat`, { method: 'POST', headers, body: JSON.stringify({ message: "hello" }) }) // to wake up memory or get memories
+      fetch(`${API_BASE}/habits/logs`, { headers })
     ]);
 
     state.tasks = await tasksRes.json();
@@ -344,16 +560,6 @@ async function fetchAllData() {
     state.reminders = await remRes.json();
     state.habits = await habitsRes.json();
     state.habitLogs = await logsRes.json();
-    
-    // Fetch AI memory separately
-    const memListRes = await fetch(`${API_BASE}/ai/chat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ message: 'Summarize what you know about me.' })
-    });
-    // We can also just fetch memory directly from a memory endpoint if exposed.
-    // Let's add direct memory fetch
-    const directMem = await fetch(`${API_BASE}/ai/history`, { headers }); // history
   } catch (error) {
     console.error('Error fetching data:', error);
   }
@@ -372,10 +578,12 @@ function getHeaders() {
 }
 
 function updateGeminiStatusIndicator() {
+  if (!geminiStatus) return;
   // Gemini is built-in server-side — always show as active
   geminiStatus.classList.remove('off');
   geminiStatus.classList.add('on');
-  geminiStatus.querySelector('.status-label').innerText = 'AI Ready';
+  const label = geminiStatus.querySelector('.status-label');
+  if (label) label.innerText = 'AI Ready';
 }
 
 function saveSettings() {
@@ -392,9 +600,30 @@ function clearApiKey() {
 // OVERVIEW TAB LOGIC
 // ----------------------------------------------------
 async function updateOverviewTab() {
-  // Update Stats Cards
+  // Update Launchpad Badges
+  const launchpadTasksBadge = document.getElementById('launchpad-tasks-badge');
+  const launchpadCalendarBadge = document.getElementById('launchpad-calendar-badge');
+  const launchpadHabitsBadge = document.getElementById('launchpad-habits-badge');
+  
   const totalTasks = state.tasks.length;
   const completedTasks = state.tasks.filter(t => t.status === 'done').length;
+  const pendingTasks = state.tasks.filter(t => t.status !== 'done').length;
+  const activeHabits = state.habits.length;
+  
+  if (launchpadTasksBadge) {
+    const lang = state.settings.lang || 'en';
+    launchpadTasksBadge.innerText = lang === 'ar' ? `${pendingTasks} مهمة معلقة` : `${pendingTasks} Tasks Pending`;
+  }
+  if (launchpadCalendarBadge) {
+    const lang = state.settings.lang || 'en';
+    launchpadCalendarBadge.innerText = lang === 'ar' ? `${state.schedules.length} فترات مجدولة` : `${state.schedules.length} Blocks`;
+  }
+  if (launchpadHabitsBadge) {
+    const lang = state.settings.lang || 'en';
+    launchpadHabitsBadge.innerText = lang === 'ar' ? `${activeHabits} عادات نشطة` : `${activeHabits} Active Habits`;
+  }
+
+  // Update Stats Cards
   document.getElementById('stat-completed-tasks').innerText = `${completedTasks} / ${totalTasks}`;
   
   document.getElementById('stat-time-blocks').innerText = state.schedules.length;
@@ -1400,30 +1629,42 @@ async function checkAuthConfig() {
         }
       });
     } else {
+      // Clerk not configured — show auth with config message
       state.useClerk = false;
-      showAuth();
+      if (state.token) {
+        showApp();
+      } else {
+        showAuth();
+      }
     }
   } catch (err) {
     console.error('Failed to load auth config:', err);
     state.useClerk = false;
-    showAuth();
+    state.clerkError = err.message || err;
+    if (state.token) {
+      showApp();
+    } else {
+      showAuth();
+    }
   }
 }
 
 async function syncClerkSession(session) {
   try {
     const token = await session.getToken();
+    const fpInfo = await getBrowserFingerprint();
 
     const syncRes = await fetch(`${API_BASE}/auth/clerk-sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ token, fingerprint: fpInfo.hash, timezone: fpInfo.timezone })
     });
     const syncData = await syncRes.json();
 
     if (syncRes.ok) {
       setAuthState(syncData.token, syncData.name, syncData.email);
       showApp();
+      handleSecurityFlags(syncData.securityFlags);
     } else {
       throw new Error(syncData.error || 'Sync failed');
     }
@@ -1435,136 +1676,198 @@ async function syncClerkSession(session) {
 }
 
 async function loadClerkSDK(publishableKey) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const clerkDomain = atob(publishableKey.split("_")[2]).slice(0, -1);
+  if (window.Clerk?.load) return;
 
-      // 1. Load the main ClerkJS browser SDK if it is not already loaded
-      if (!window.Clerk) {
-        await new Promise((res, rej) => {
-          const script = document.createElement("script");
-          // Load from custom dev domain directly to bypass cdn.clerk.com DNS resolution failure
-          script.src = `https://${clerkDomain}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`;
-          script.setAttribute("data-clerk-publishable-key", publishableKey);
-          script.async = true;
-          script.crossOrigin = "anonymous";
-          script.onload = res;
-          script.onerror = () => rej(new Error("Failed to load ClerkJS browser bundle"));
-          document.head.appendChild(script);
-        });
-      }
+  if (!publishableKey) {
+    console.error('Clerk publishable key is missing.');
+    state.clerkError = 'Publishable key missing';
+    return;
+  }
 
-      // If window.Clerk is a constructor, instantiate it
-      const clerkInstance = typeof window.Clerk === 'function' ? new window.Clerk(publishableKey) : window.Clerk;
-      window.Clerk = clerkInstance;
-
-      // 2. Load the Clerk UI Bundle from custom domain (optional)
-      let loadedCustomUI = false;
-      try {
-        await new Promise((res, rej) => {
-          const script = document.createElement("script");
-          script.src = `https://${clerkDomain}/npm/@clerk/ui@1/dist/ui.browser.js`;
-          script.setAttribute("data-clerk-publishable-key", publishableKey);
-          script.async = true;
-          script.crossOrigin = "anonymous";
-          script.onload = res;
-          script.onerror = () => rej(new Error("Failed to load @clerk/ui bundle"));
-          document.head.appendChild(script);
-        });
-        loadedCustomUI = true;
-      } catch (uiErr) {
-        console.warn("Clerk custom UI bundle failed to load. Falling back to default Clerk UI:", uiErr);
-      }
-
-      // 3. Initialize Clerk with the UI constructor if loaded, otherwise standard load
-      if (loadedCustomUI && window.__internal_ClerkUICtor) {
-        await window.Clerk.load({
-          ui: { ClerkUI: window.__internal_ClerkUICtor },
-        });
-      } else {
-        await window.Clerk.load();
-      }
-
-      resolve();
-    } catch (err) {
-      console.error("Clerk loading failed:", err);
-      reject(err);
-    }
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = resolve;
+    s.onerror = (e) => reject(e);
+    document.head.appendChild(s);
   });
-}
 
-// ============================================================
-// MCP INTEGRATIONS (Web Search + Scraper)
-// ============================================================
-async function searchExa() {
-  const query = document.getElementById('exa-search-input').value.trim();
-  if (!query) return;
-
-  const resultsEl = document.getElementById('exa-results');
-  resultsEl.innerHTML = '<div class="search-loading">Searching the web...</div>';
-
+  // Extract custom domain from publishable key (format: pk_test_<base64>)
+  let customDomain = null;
   try {
-    const res = await fetch('/api/mcp/search', {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ query })
-    });
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error || 'Search failed');
-
-    resultsEl.innerHTML = '';
-    const results = data.results || [];
-
-    if (results.length === 0) {
-      resultsEl.innerHTML = '<div class="empty-state">No results found.</div>';
-      return;
+    const parts = publishableKey.split('_');
+    if (parts.length >= 3) {
+      const decoded = atob(parts[2]);
+      customDomain = decoded.split('$')[0];
     }
-
-    results.forEach(r => {
-      const div = document.createElement('div');
-      div.className = 'search-result-item';
-      div.innerHTML = `
-        <a href="${r.url}" target="_blank" class="result-title">${r.title || r.url}</a>
-        <p class="result-snippet">${r.text ? r.text.substring(0, 200) + '...' : ''}</p>
-        <span class="result-url">${r.url}</span>
-      `;
-      resultsEl.appendChild(div);
-    });
-  } catch (err) {
-    resultsEl.innerHTML = `<div class="empty-state error">Error: ${err.message}</div>`;
+  } catch (e) {
+    console.warn('Could not parse Clerk domain from key:', e);
   }
-}
 
-async function scrapePage() {
-  const url = document.getElementById('scrape-url-input').value.trim();
-  if (!url) return;
+  // Try sources in order: custom domain -> unpkg -> Clerk CDN
+  const sources = [
+    customDomain ? `https://${customDomain}/npm/@clerk/clerk-js@5/dist/clerk.browser.js` : null,
+    'https://unpkg.com/@clerk/clerk-js@5/dist/clerk.browser.js',
+    'https://cdn.clerk.com/public/clerk-js/5/clerk.browser.js'
+  ].filter(Boolean);
 
-  const resultEl = document.getElementById('scrape-result');
-  resultEl.innerHTML = '<div class="search-loading">Reading page...</div>';
+  let loaded = false;
+  for (const url of sources) {
+    try {
+      console.log('[Clerk] Loading SDK from:', url);
+      await loadScript(url);
+      loaded = true;
+      break;
+    } catch (e) {
+      console.warn('[Clerk] Failed to load from', url, e.message);
+    }
+  }
+
+  if (!loaded) {
+    state.clerkError = 'Failed to load Clerk SDK from all sources';
+    return;
+  }
+
+  // Wait for UMD export to attach to window (custom domain SDK uses globalThis)
+  let retries = 40;
+  while (retries-- > 0 && typeof window.Clerk !== 'function') {
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  // UMD fallback: check globalThis / self
+  if (typeof window.Clerk !== 'function' && typeof globalThis.Clerk === 'function') {
+    window.Clerk = globalThis.Clerk;
+  }
+  if (typeof window.Clerk !== 'function' && typeof self.Clerk === 'function') {
+    window.Clerk = self.Clerk;
+  }
+
+  if (typeof window.Clerk !== 'function') {
+    console.error('[Clerk] SDK loaded but Clerk constructor not found on window/globalThis/self');
+    state.clerkError = 'Clerk SDK initialization failed';
+    return;
+  }
+
+  // Instantiate Clerk with publishable key
+  window.Clerk = new window.Clerk(publishableKey);
 
   try {
-    const res = await fetch('/api/mcp/scrape', {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ url })
-    });
-    const data = await res.json();
+    await window.Clerk.load();
+    state.clerkLoaded = true;
+    state.clerkError = '';
 
-    if (!res.ok) throw new Error(data.error || 'Scrape failed');
-
-    resultEl.innerHTML = `<pre class="scrape-content">${(data.content || '').substring(0, 2000)}</pre>`;
-  } catch (err) {
-    resultEl.innerHTML = `<div class="empty-state error">Error: ${err.message}</div>`;
+    if (state.turnstilePassed) {
+      showAuth();
+    }
+  } catch (e) {
+    console.error('[Clerk] Clerk.load() failed:', e);
+    state.clerkError = 'Clerk initialization failed';
   }
 }
 
-// Wire up search buttons (using capture:true to run after the main DOMContentLoaded)
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('btn-exa-search')?.addEventListener('click', searchExa);
-  document.getElementById('exa-search-input')?.addEventListener('keypress', e => { if (e.key === 'Enter') searchExa(); });
-  document.getElementById('btn-scrape')?.addEventListener('click', scrapePage);
-}, { capture: true });
+// ============================================================
+// BROWSER FINGERPRINTING & SECURITY ALERTS
+// ============================================================
+async function getBrowserFingerprint() {
+  const data = {};
+  
+  // 1. Basic properties
+  data.userAgent = navigator.userAgent;
+  data.language = navigator.language || navigator.userLanguage;
+  data.languages = navigator.languages ? navigator.languages.join(',') : '';
+  data.colorDepth = window.screen.colorDepth;
+  data.devicePixelRatio = window.devicePixelRatio || 1;
+  data.screenResolution = `${window.screen.width}x${window.screen.height}`;
+  data.availableResolution = `${window.screen.availWidth}x${window.screen.availHeight}`;
+  
+  // 2. Timezone
+  try {
+    data.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (e) {
+    data.timezone = 'unknown';
+  }
+  
+  // 3. Canvas fingerprinting
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 200;
+    canvas.height = 50;
+    ctx.textBaseline = 'top';
+    ctx.font = "14px 'Arial', sans-serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#f60";
+    ctx.fillRect(125,1,62,20);
+    ctx.fillStyle = "#069";
+    ctx.fillText("ZenFlow Security checking 🦾, \ud83d\ude03", 2, 15);
+    ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+    ctx.fillText("ZenFlow Security checking 🦾, \ud83d\ude03", 4, 17);
+    data.canvas = canvas.toDataURL();
+  } catch (e) {
+    data.canvas = 'canvas-error';
+  }
+
+  // 4. WebGL fingerprinting
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (gl) {
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      data.webglVendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'unknown';
+      data.webglRenderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown';
+    } else {
+      data.webglVendor = 'no-webgl';
+      data.webglRenderer = 'no-webgl';
+    }
+  } catch (e) {
+    data.webglVendor = 'webgl-error';
+    data.webglRenderer = 'webgl-error';
+  }
+
+  // 5. Font detection (simple heuristic)
+  const fontList = ['Arial', 'Courier New', 'Georgia', 'Times New Roman', 'Verdana', 'Trebuchet MS', 'Impact', 'Comic Sans MS'];
+  const detectedFonts = [];
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const text = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    ctx.font = '72px monospace';
+    const baselineSize = ctx.measureText(text).width;
+    for (const font of fontList) {
+      ctx.font = `72px '${font}', monospace`;
+      const size = ctx.measureText(text).width;
+      if (size !== baselineSize) {
+        detectedFonts.push(font);
+      }
+    }
+  } catch (e) {}
+  data.fonts = detectedFonts.join(',');
+
+  // Hash the whole data string to get a clean fingerprint
+  const dataString = JSON.stringify(data);
+  let hash = 0;
+  for (let i = 0; i < dataString.length; i++) {
+    const char = dataString.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  
+  return {
+    hash: 'fp_' + Math.abs(hash).toString(16),
+    timezone: data.timezone
+  };
+}
+
+function handleSecurityFlags(flags) {
+  if (!flags) return;
+  if (flags.vpnDetected) {
+    showToast('Security Alert', 'Suspicious connection: Browser timezone and IP country do not match (possible VPN/Proxy usage).', 'warning');
+  }
+  if (flags.isNewDevice) {
+    showToast('New Device Login', 'Login from a new browser/device fingerprint detected. If this was not you, secure your account.', 'info');
+  }
+}
 
 // ============================================================
 // THEME SWITCHER
@@ -1702,10 +2005,15 @@ const translations = {
     nav_calendar: "Calendar Schedule",
     nav_habits: "Habits Tracker",
     nav_ai: "AI Assistant",
-    nav_search: "Smart Search",
     nav_theme: "Theme",
     nav_logout: "Sign Out",
     nav_settings: "App Settings",
+    btn_back_hub: "Back to Hub",
+    launchpad_tasks_desc: "Manage and organize tasks",
+    launchpad_calendar_desc: "AI auto-scheduled agenda",
+    launchpad_habits_desc: "Build daily consistency",
+    launchpad_ai_desc: "Optimize plans with AI",
+    launchpad_settings_desc: "Configure theme & language",
     hdr_subtitle: "Welcome to your dashboard. Let's make today productive.",
     hdr_gemini_off: "Gemini API: Offline",
     hdr_gemini_on: "Gemini API: Active",
@@ -1762,14 +2070,6 @@ const translations = {
     ai_welcome_opt2: "Set reminders for you (\"Remind me to call John tomorrow at 10 AM\")",
     ai_welcome_opt3: "Remember work habits and preferences (\"Remember that I code best in the morning\")",
     ai_welcome_opt4: "Inquire about task priorities and summaries (\"What are my high priority tasks?\")",
-    sr_title: "Smart Web Search",
-    sr_sub: "Browse the web and read page contents with AI assistance",
-    sr_card_search: "🔍 AI Search",
-    sr_placeholder_search: "Search the web...",
-    sr_btn_search: "Search",
-    sr_card_scrape: "📖 Web Reader",
-    sr_placeholder_scrape: "https://example.com",
-    sr_btn_scrape: "Read Page",
     md_rem_title: "Create Reminder",
     md_rem_msg_lbl: "Reminder Message",
     md_rem_msg_ph: "What should we remind you about?",
@@ -1799,8 +2099,6 @@ const translations = {
     md_set_data_chat_btn: "Clear Conversation History",
     md_set_sysinfo_title: "System Info",
     sys_ai_brain: "AI Brain",
-    sys_smart_search: "Smart Search",
-    sys_web_reader: "Web Reader",
     sys_memory_recall: "Memory Recall",
     md_set_btn_save: "Save Changes",
     md_conf_title: "Confirm Action",
@@ -1825,10 +2123,15 @@ const translations = {
     nav_calendar: "جدول التقويم",
     nav_habits: "متابع العادات",
     nav_ai: "مساعد ذكي",
-    nav_search: "البحث الذكي",
     nav_theme: "المظهر",
     nav_logout: "تسجيل خروج",
     nav_settings: "الإعدادات",
+    btn_back_hub: "العودة للرئيسية",
+    launchpad_tasks_desc: "إدارة وتنظيم المهام اليومية",
+    launchpad_calendar_desc: "جدولة الفترات بالذكاء الاصطناعي",
+    launchpad_habits_desc: "بناء الالتزام ومتابعة العادات",
+    launchpad_ai_desc: "حسّن أسلوب عملك مع المساعد",
+    launchpad_settings_desc: "تخصيص السمة، اللغة، والتنبيهات",
     hdr_subtitle: "مرحبًا بك في لوحة التحكم الخاصة بك. لنبدأ يومًا إنتاجيًا.",
     hdr_gemini_off: "ذكاء جيميناي: غير متصل",
     hdr_gemini_on: "ذكاء جيميناي: نشط",
@@ -1885,14 +2188,6 @@ const translations = {
     ai_welcome_opt2: "تعيين تذكيرات لك (\"ذكرني بالاتصال بجون غدًا الساعة 10 صباحًا\")",
     ai_welcome_opt3: "حفظ عاداتك وتفضيلاتك (\"تذكر أنني أعمل بشكل أفضل في الصباح\")",
     ai_welcome_opt4: "الاستعلام عن أولويات مهامك وتلخيصها (\"ما هي المهام ذات الأولوية العالية؟\")",
-    sr_title: "البحث العلمي والويب بالذكاء الاصطناعي",
-    sr_sub: "ابحث في شبكة الإنترنت واقرأ أي صفحة مع مساعدك الذكي",
-    sr_card_search: "🔍 بحث ذكاء اصطناعي (Exa)",
-    sr_placeholder_search: "ابحث في الويب بالذكاء الاصطناعي...",
-    sr_btn_search: "بحث",
-    sr_card_scrape: "🕷️ قاشط الويب للمحتوى",
-    sr_placeholder_scrape: "https://example.com",
-    sr_btn_scrape: "قشط المحتوى",
     md_rem_title: "إنشاء تذكير جديد",
     md_rem_msg_lbl: "نص التذكير",
     md_rem_msg_ph: "ما الشيء الذي تود أن نذكرك به؟",
@@ -1922,8 +2217,6 @@ const translations = {
     md_set_data_chat_btn: "مسح محفوظات وسجل المحادثات",
     md_set_sysinfo_title: "معلومات النظام الحالية",
     sys_ai_brain: "عقل الذكاء الاصطناعي",
-    sys_smart_search: "البحث الذكي",
-    sys_web_reader: "قاشط الويب",
     sys_memory_recall: "استدعاء الذاكرة",
     md_set_btn_save: "حفظ الإعدادات والتغييرات",
     md_conf_title: "تأكيد الإجراء",

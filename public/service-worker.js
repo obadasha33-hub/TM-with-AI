@@ -1,25 +1,22 @@
-const CACHE_NAME = 'tmai-cache-v1';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/logo.svg',
-  '/manifest.json'
-];
-
 self.addEventListener('install', e => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
+    caches.keys().then(keys => {
+      return Promise.all(keys.map(key => caches.delete(key)));
+    }).then(() => {
+      return self.clients.matchAll();
+    }).then(clients => {
+      clients.forEach(client => {
+        if (client.url) client.navigate(client.url);
+      });
     })
   );
 });
 
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(response => {
-      return response || fetch(e.request);
-    })
-  );
+  // Always fetch from network, bypassing cache completely
+  e.respondWith(fetch(e.request));
 });

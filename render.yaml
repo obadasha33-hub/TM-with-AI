@@ -8,17 +8,11 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 18.0.0
-      - key: DATABASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+      - key: CLERK_PUBLISHABLE_KEY
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: EXA_API_KEY
-        sync: false
-      - key: FIRECRAWL_API_KEY
-        sync: false
-      - key: MEM0_API_KEY
+      - key: JWT_SECRET
         sync: false

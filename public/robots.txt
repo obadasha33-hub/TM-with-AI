@@ -1,0 +1,9 @@
+User-agent: *
+Disallow: /wp-admin
+Disallow: /.env
+Disallow: /wp-login.php
+Disallow: /xmlrpc.php
+Disallow: /config.json
+Disallow: /backup.sql
+Disallow: /backup.zip
+Disallow: /admin/config.php

@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TM with AI - Intelligent Productivity Hub</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body class="dark-theme">
+  <!-- Notifications Panel -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div id="app-container" class="app-container hidden">
+    <!-- Mobile Navigation Drawer -->
+    <aside id="dash-panel" class="dash-panel hidden">
+      <nav class="dash-nav">
+        <button class="nav-item active" data-tab="overview" data-i18n="nav_overview">Overview</button>
+        <button class="nav-item" data-tab="tasks" data-i18n="nav_tasks">Kanban Board</button>
+        <button class="nav-item" data-tab="calendar" data-i18n="nav_calendar">Calendar Schedule</button>
+        <button class="nav-item" data-tab="habits" data-i18n="nav_habits">Habits Tracker</button>
+        <button class="nav-item" data-tab="ai-chat" data-i18n="nav_ai">AI Assistant</button>
+      </nav>
+      <button id="logout-btn-mobile" class="btn btn-primary btn-logout mt-2">Log Out</button>
+    </aside>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- MAIN APP WORKSPACE -->
+    <main class="main-content">
+      <!-- HEADER -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="header-titles">
+            <h1 id="header-greeting" class="header-title">Good Evening, User</h1>
+            <p id="header-subtitle" class="header-subtitle" data-i18n="hdr_subtitle">Welcome to your dashboard. Let's make today productive.</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <!-- Gemini Status Indicator -->
+          <div id="gemini-status" class="gemini-status off">
+            <span class="status-dot"></span>
+            <span class="status-label">Gemini API: Offline</span>
+          </div>
+          <!-- Live Date & Clock -->
+          <div class="header-datetime">
+            <div id="header-time" class="header-time">19:48:46</div>
+            <div id="header-date" class="header-date">Friday, June 12, 2026</div>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB CONTENTS -->
+      <div class="tab-viewport">
+
+        <!-- OVERVIEW TAB -->
+        <section id="tab-overview" class="tab-pane active">
+          <!-- Banner Widget -->
+          <div class="overview-banner">
+            <div class="banner-body">
+              <h3 data-i18n="ov_banner_title">Intelligent Schedule Optimizer</h3>
+              <p data-i18n="ov_banner_desc">TM with AI analyzes your task priorities, estimated times, and preferences to build the perfect calendar schedule. Click "AI Auto-Schedule" in the Calendar tab to let the AI organize your time blocks!</p>
+              <button class="btn btn-primary btn-sm" id="banner-chat-ai" data-i18n="ov_banner_btn">Ask AI Assistant</button>
+            </div>
+            <div class="banner-image">
+              <svg class="banner-brain-svg" viewBox="0 0 100 100" width="120" height="120">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="2" />
+                <path d="M50,20 C40,20 30,30 30,45 C30,60 40,70 50,80 C60,70 70,60 70,45 C70,30 60,20 50,20 Z" fill="none" stroke="rgba(168, 85, 247, 0.2)" stroke-width="3" />
+                <path d="M50,20 C40,20 30,30 30,45 C30,60 40,70 50,80 C60,70 70,60 70,45 C70,30 60,20 50,20 Z" fill="none" stroke="url(#logo-grad)" stroke-width="4" stroke-linecap="round" />
+                <circle cx="50" cy="45" r="10" fill="none" stroke="#ec4899" stroke-width="2" />
+                <line x1="50" y1="20" x2="50" y2="80" stroke="#a855f7" stroke-width="2" stroke-dasharray="4 4" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Launchpad Grid (Dashboard Hub) -->
+          <div class="launchpad-grid">
+            <button class="launchpad-card" onclick="switchTab('tasks')">
+              <div class="launchpad-icon-wrapper purple">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2zm0 8H7v-2h10v2z"/></svg>
+              </div>
+              <div class="launchpad-info">
+                <h3 data-i18n="nav_tasks">Kanban Board</h3>
+                <p data-i18n="launchpad_tasks_desc">Manage and organize tasks</p>
+                <span id="launchpad-tasks-badge" class="launchpad-badge">0 Tasks</span>
+              </div>
+            </button>
+
+            <button class="launchpad-card" onclick="switchTab('calendar')">
+              <div class="launchpad-icon-wrapper cyan">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg>
+              </div>
+              <div class="launchpad-info">
+                <h3 data-i18n="nav_calendar">Time Scheduler</h3>
+                <p data-i18n="launchpad_calendar_desc">AI auto-scheduled agenda</p>
+                <span id="launchpad-calendar-badge" class="launchpad-badge">0 Blocks</span>
+              </div>
+            </button>
+
+            <button class="launchpad-card" onclick="switchTab('habits')">
+              <div class="launchpad-icon-wrapper pink">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              </div>
+              <div class="launchpad-info">
+                <h3 data-i18n="nav_habits">Habits Tracker</h3>
+                <p data-i18n="launchpad_habits_desc">Build daily consistency</p>
+                <span id="launchpad-habits-badge" class="launchpad-badge">0 Active</span>
+              </div>
+            </button>
+
+            <button class="launchpad-card" onclick="switchTab('ai-chat')">
+              <div class="launchpad-icon-wrapper gold">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+              </div>
+              <div class="launchpad-info">
+                <h3 data-i18n="nav_ai">AI Assistant</h3>
+                <p data-i18n="launchpad_ai_desc">Optimize plans with AI</p>
+                <span class="launchpad-badge online">AI Ready</span>
+              </div>
+            </button>
+
+            <button class="launchpad-card" id="launchpad-settings-btn">
+              <div class="launchpad-icon-wrapper gray">
+                <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+              </div>
+              <div class="launchpad-info">
+                <h3 data-i18n="md_set_title">App Settings</h3>
+                <p data-i18n="launchpad_settings_desc">Configure theme & language</p>
+                <span class="launchpad-badge">System Options</span>
+              </div>
+            </button>
+          </div>
+
+          <!-- Quick Stats Cards Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon-wrapper purple">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label" data-i18n="stat_tasks_completed">Tasks Completed</span>
+                <span id="stat-completed-tasks" class="stat-value">0 / 0</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrapper cyan">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm3.3 14.79L11 14V7h1.5v6.2l3.53 2.12-.74 1.47z"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label" data-i18n="stat_time_blocks">AI Time Blocks</span>
+                <span id="stat-time-blocks" class="stat-value">0</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrapper pink">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label" data-i18n="stat_habit_streaks">Habit Streaks</span>
+                <span id="stat-habit-streak" class="stat-value">0 Days</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon-wrapper gold">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label" data-i18n="stat_pending_reminders">Pending Reminders</span>
+                <span id="stat-reminders-count" class="stat-value">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mid Dashboard Grid layout -->
+          <div class="dashboard-mid-grid">
+            <!-- Left Panel: AI Insights & Memory list -->
+            <div class="grid-card">
+              <div class="card-header">
+                <h3 data-i18n="ov_memory_title">🤖 TM with AI Memory & Preferences</h3>
+                <p data-i18n="ov_memory_sub">Things the AI assistant has memorized about you to adjust schedules.</p>
+              </div>
+              <div class="card-body">
+                <ul id="ai-memory-list" class="memory-list">
+                  <li class="empty-state" data-i18n="ov_memory_empty">No user preferences memorized yet. Chat with the AI and tell it about your work habits!</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Right Panel: Upcoming Reminders & Notifications -->
+            <div class="grid-card">
+              <div class="card-header">
+                <h3 data-i18n="ov_reminders_title">🔔 Upcoming Reminders</h3>
+                <button class="btn btn-secondary btn-sm" id="btn-add-reminder" data-i18n="ov_reminders_btn">Add Manual</button>
+              </div>
+              <div class="card-body">
+                <div id="reminders-list-container" class="reminders-list">
+                  <div class="empty-state" data-i18n="ov_reminders_empty">No upcoming reminders set.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- KANBAN BOARD TAB -->
+        <section id="tab-tasks" class="tab-pane">
+          <div class="tab-header-actions">
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-back-hub" onclick="switchTab('overview')" style="padding: 0.5rem 0.75rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" style="margin-inline-end: 6px; fill: currentColor;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                <span data-i18n="btn_back_hub">Back to Hub</span>
+              </button>
+              <h2 data-i18n="kb_title" style="margin: 0;">Kanban Task Board</h2>
+            </div>
+            <button class="btn btn-primary" id="btn-create-task" data-i18n="kb_btn_new">
+              <svg viewBox="0 0 24 24" width="16" height="16" style="margin-inline-end:8px;fill:currentColor;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              New Task
+            </button>
+          </div>
+
+          <!-- Board Columns -->
+          <div class="kanban-board">
+            <!-- TO DO COLUMN -->
+            <div class="kanban-column" data-status="todo" ondragover="allowDrop(event)" ondrop="dropTask(event)">
+              <div class="column-header border-todo">
+                <span class="column-title" data-i18n="kb_col_todo">To Do</span>
+                <span class="task-count badge-todo" id="count-todo">0</span>
+              </div>
+              <div class="task-list" id="list-todo"></div>
+            </div>
+
+            <!-- IN PROGRESS COLUMN -->
+            <div class="kanban-column" data-status="inprogress" ondragover="allowDrop(event)" ondrop="dropTask(event)">
+              <div class="column-header border-inprogress">
+                <span class="column-title" data-i18n="kb_col_progress">In Progress</span>
+                <span class="task-count badge-inprogress" id="count-inprogress">0</span>
+              </div>
+              <div class="task-list" id="list-inprogress"></div>
+            </div>
+
+            <!-- IN REVIEW COLUMN -->
+            <div class="kanban-column" data-status="review" ondragover="allowDrop(event)" ondrop="dropTask(event)">
+              <div class="column-header border-review">
+                <span class="column-title" data-i18n="kb_col_review">In Review</span>
+                <span class="task-count badge-review" id="count-review">0</span>
+              </div>
+              <div class="task-list" id="list-review"></div>
+            </div>
+
+            <!-- DONE COLUMN -->
+            <div class="kanban-column" data-status="done" ondragover="allowDrop(event)" ondrop="dropTask(event)">
+              <div class="column-header border-done">
+                <span class="column-title" data-i18n="kb_col_done">Done</span>
+                <span class="task-count badge-done" id="count-done">0</span>
+              </div>
+              <div class="task-list" id="list-done"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CALENDAR SCHEDULER TAB -->
+        <section id="tab-calendar" class="tab-pane">
+          <div class="tab-header-actions">
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-back-hub" onclick="switchTab('overview')" style="padding: 0.5rem 0.75rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" style="margin-inline-end: 6px; fill: currentColor;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                <span data-i18n="btn_back_hub">Back to Hub</span>
+              </button>
+              <div>
+                <h2 data-i18n="cal_title" style="margin: 0;">Time Scheduler</h2>
+                <p class="tab-subheader" data-i18n="cal_subtitle" style="margin: 0;">Optimized daily schedules built automatically by AI</p>
+              </div>
+            </div>
+            <div class="calendar-actions">
+              <button class="btn btn-secondary" id="btn-add-schedule" data-i18n="cal_btn_add">Add Time Block</button>
+              <button class="btn btn-primary btn-ai-schedule" id="btn-ai-auto-schedule" data-i18n="cal_btn_auto">
+                <svg class="brain-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-inline-end: 8px;">
+                  <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.13 19.62 10.51 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm-1-8h2v5h-2zm0-3h2v2h-2z"/>
+                </svg>
+                AI Auto-Schedule
+              </button>
+            </div>
+          </div>
+
+          <div class="calendar-layout">
+            <!-- Calendar Navigation and grid -->
+            <div class="calendar-month-view card">
+              <div class="calendar-nav">
+                <button class="btn btn-icon" id="prev-month-btn">&lt;</button>
+                <h3 id="calendar-title">June 2026</h3>
+                <button class="btn btn-icon" id="next-month-btn">&gt;</button>
+              </div>
+              <div class="calendar-grid-header">
+                <div data-i18n="day_sun">Sun</div>
+                <div data-i18n="day_mon">Mon</div>
+                <div data-i18n="day_tue">Tue</div>
+                <div data-i18n="day_wed">Wed</div>
+                <div data-i18n="day_thu">Thu</div>
+                <div data-i18n="day_fri">Fri</div>
+                <div data-i18n="day_sat">Sat</div>
+              </div>
+              <div class="calendar-grid-cells" id="calendar-cells"></div>
+            </div>
+
+            <!-- Day Timeline view -->
+            <div class="calendar-day-timeline card">
+              <div class="timeline-header">
+                <h3 id="timeline-date-label">Today's Schedule</h3>
+                <span class="timeline-sub" data-i18n="cal_time_timeline">AI Time Allocations</span>
+              </div>
+              <div class="timeline-list" id="timeline-slots-container">
+                <!-- Timeline hours from 8:00 AM to 10:00 PM -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- HABIT TRACKER TAB -->
+        <section id="tab-habits" class="tab-pane">
+          <div class="tab-header-actions">
+            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-back-hub" onclick="switchTab('overview')" style="padding: 0.5rem 0.75rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" style="margin-inline-end: 6px; fill: currentColor;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                <span data-i18n="btn_back_hub">Back to Hub</span>
+              </button>
+              <h2 data-i18n="hb_title" style="margin: 0;">Habits Tracker</h2>
+            </div>
+            <button class="btn btn-primary" id="btn-create-habit" data-i18n="hb_btn_new">Add New Habit</button>
+          </div>
+
+          <!-- Habit List Table structure -->
+          <div class="habits-table-card card">
+            <div class="habit-table-header">
+              <div class="habit-col-name" data-i18n="md_habit_name_lbl">Habit Name</div>
+              <div class="habit-col-days">
+                <span class="day-lbl" data-i18n="day_mon">Mon</span>
+                <span class="day-lbl" data-i18n="day_tue">Tue</span>
+                <span class="day-lbl" data-i18n="day_wed">Wed</span>
+                <span class="day-lbl" data-i18n="day_thu">Thu</span>
+                <span class="day-lbl" data-i18n="day_fri">Fri</span>
+                <span class="day-lbl" data-i18n="day_sat">Sat</span>
+                <span class="day-lbl" data-i18n="day_sun">Sun</span>
+              </div>
+              <div class="habit-col-actions" data-i18n="kb_col_options">Options</div>
+            </div>
+            <div class="habit-list-rows" id="habit-rows-container">
+              <div class="empty-state" data-i18n="hb_empty">No habits created yet. Track tasks and build your consistency!</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- AI CHAT ASSISTANT TAB -->
+        <section id="tab-ai-chat" class="tab-pane">
+          <div class="tab-header-actions" style="margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <button class="btn btn-secondary btn-back-hub" onclick="switchTab('overview')" style="padding: 0.5rem 0.75rem;">
+                <svg viewBox="0 0 24 24" width="16" height="16" style="margin-inline-end: 6px; fill: currentColor;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                <span data-i18n="btn_back_hub">Back to Hub</span>
+              </button>
+              <h2 data-i18n="nav_ai" style="margin: 0;">AI Assistant Chat</h2>
+            </div>
+          </div>
+          <div class="chat-container card">
+            <div class="chat-header">
+              <div class="chat-agent-profile">
+                <div class="ai-avatar">AI</div>
+                <div class="ai-details">
+                  <h4 data-i18n="ai_title">TM with AI Assistant</h4>
+                  <span class="online-indicator"><span class="pulse"></span><span data-i18n="ai_online">Online</span></span>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-clear-chat" data-i18n="ai_btn_clear">Clear History</button>
+            </div>
+            <div class="chat-messages" id="chat-messages-container">
+              <div class="message system-msg">
+                <span data-i18n="ai_welcome_title">Welcome to TM with AI Assistant! You can ask me to:</span>
+                <ul>
+                  <li data-i18n="ai_welcome_opt1">Schedule your tasks on your calendar ("Schedule task x on Monday at 3pm")</li>
+                  <li data-i18n="ai_welcome_opt2">Set reminders for you ("Remind me to call John tomorrow at 10 AM")</li>
+                  <li data-i18n="ai_welcome_opt3">Remember work habits and preferences ("Remember that I code best in the morning")</li>
+                  <li data-i18n="ai_welcome_opt4">Inquire about task priorities and summaries ("What are my high priority tasks?")</li>
+                </ul>
+              </div>
+            </div>
+            <div class="chat-input-area">
+              <input type="text" id="chat-input" placeholder="Ask AI to schedule time, set reminders or memorize habits..." data-i18n="ai_placeholder">
+              <button class="btn btn-primary" id="btn-send-chat" data-i18n="ai_btn_send">Send</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- CREATE TASK MODAL -->
+  <div id="modal-task" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="task-modal-title">Create New Task</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-task')">&times;</button>
+      </div>
+      <form id="task-form" class="modal-form">
+        <input type="hidden" id="task-id-field">
+        <div class="form-group">
+          <label for="task-title">Task Title</label>
+          <input type="text" id="task-title" placeholder="Enter task title" required>
+        </div>
+        <div class="form-group">
+          <label for="task-desc">Description</label>
+          <textarea id="task-desc" placeholder="Details or subtasks..." rows="3"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="form-group col-6">
+            <label for="task-category">Category</label>
+            <select id="task-category">
+              <option value="Work">Work</option>
+              <option value="Personal" selected>Personal</option>
+              <option value="Health">Health</option>
+              <option value="Finance">Finance</option>
+              <option value="Education">Education</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label for="task-status">Status</label>
+            <select id="task-status">
+              <option value="todo" selected>To Do</option>
+              <option value="inprogress">In Progress</option>
+              <option value="review">In Review</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <div class="form-group col-6">
+            <label for="task-due">Due Date</label>
+            <input type="date" id="task-due">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-task')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE TIME BLOCK MODAL -->
+  <div id="modal-schedule" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Add Schedule Block</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-schedule')">&times;</button>
+      </div>
+      <form id="schedule-form" class="modal-form">
+        <div class="form-group">
+          <label for="sched-title">Schedule Title</label>
+          <input type="text" id="sched-title" placeholder="e.g. Focus Block: Coding" required>
+        </div>
+        <div class="form-group">
+          <label for="sched-task-id">Link to Task (Optional)</label>
+          <select id="sched-task-id">
+            <option value="">-- No Linked Task --</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label for="sched-start">Start Date & Time</label>
+            <input type="datetime-local" id="sched-start" required>
+          </div>
+          <div class="form-group col-6">
+            <label for="sched-end">End Date & Time</label>
+            <input type="datetime-local" id="sched-end" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-schedule')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Block</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CREATE REMINDER MODAL -->
+  <div id="modal-reminder" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 data-i18n="md_rem_title">Create Reminder</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-reminder')">&times;</button>
+      </div>
+      <form id="reminder-form" class="modal-form">
+        <div class="form-group">
+          <label for="rem-message" data-i18n="md_rem_msg_lbl">Reminder Message</label>
+          <input type="text" id="rem-message" placeholder="What should we remind you about?" data-i18n="md_rem_msg_ph" required>
+        </div>
+        <div class="form-group">
+          <label for="rem-task-id" data-i18n="md_rem_task_lbl">Link to Task (Optional)</label>
+          <select id="rem-task-id">
+            <option value="" data-i18n="md_rem_task_none">-- No Linked Task --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="rem-time" data-i18n="md_rem_time_lbl">Remind At (Date & Time)</label>
+          <input type="datetime-local" id="rem-time" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-reminder')" data-i18n="md_task_btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="md_rem_btn_create">Save Reminder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP SETTINGS MODAL -->
+  <div id="modal-settings" class="modal-overlay hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3 data-i18n="md_set_title">Workspace Options</h3>
+        <button class="modal-close-btn" onclick="closeModal('modal-settings')">&times;</button>
+      </div>
+      <div class="modal-form">
+        <div class="settings-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem;">
+          <!-- Left Column -->
+          <div class="settings-col">
+            <!-- Feature 1: User Profile -->
+            <div class="settings-section" style="margin-bottom: 1.5rem;">
+              <h4 data-i18n="md_set_profile_title" style="margin-bottom: 0.75rem; color: var(--clr-primary); font-size: 1rem;">Display Profile</h4>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="settings-username" data-i18n="md_set_username_lbl" style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">Your Name</label>
+                <input type="text" id="settings-username" placeholder="Enter display name" data-i18n="md_set_username_ph" style="width: 100%; padding: 0.75rem; border-radius: var(--r-md); background: var(--bg-input); border: 1px solid var(--border-card); color: var(--text-main);">
+              </div>
+            </div>
+
+            <!-- Feature 2: Interface Styling (Theme & Language Selector) -->
+            <div class="settings-section" style="margin-bottom: 1.5rem;">
+              <h4 data-i18n="md_set_style_title" style="margin-bottom: 0.75rem; color: var(--clr-primary); font-size: 1rem;">Workspace Style</h4>
+              <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label data-i18n="md_set_theme_lbl" style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">Color Theme</label>
+                <select id="settings-theme-select" style="width: 100%; padding: 0.75rem; border-radius: var(--r-md); background: var(--bg-card-solid); border: 1px solid var(--border-card); color: var(--text-main);">
+                  <option value="aurora">Cherry Noir (Cotton, Cherry Red, Maroon, Noir Black)</option>
+                  <option value="ember">Laurel Forest (Deep Bluish, Moderate Green, Laurel Green, Light Cream)</option>
+                  <option value="forest">Ocean Breeze (Deep Blue, Powder Blue, Floral White, Pale Brown)</option>
+                  <option value="midnight">Crimson Cosmos (Gochujang Red, Crimson Blaze, Varden, Cosmos Blue)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label data-i18n="settings_lang_label" style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">App Language</label>
+                <select id="settings-lang-select" style="width: 100%; padding: 0.75rem; border-radius: var(--r-md); background: var(--bg-card-solid); border: 1px solid var(--border-card); color: var(--text-main);">
+                  <option value="en">English (English)</option>
+                  <option value="ar">العربية (Arabic)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Feature 3: Notification Alerts -->
+            <div class="settings-section">
+              <h4 data-i18n="md_set_alerts_title" style="margin-bottom: 0.75rem; color: var(--clr-primary); font-size: 1rem;">System Alerts</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-size: 0.9rem; color: var(--text-main);">
+                  <input type="checkbox" id="settings-sound-alerts" style="accent-color: var(--clr-primary); width: 1.1rem; height: 1.1rem;">
+                  <span data-i18n="md_set_alerts_sound">Play Sound Alarms</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-size: 0.9rem; color: var(--text-main);">
+                  <input type="checkbox" id="settings-push-alerts" style="accent-color: var(--clr-primary); width: 1.1rem; height: 1.1rem;">
+                  <span data-i18n="md_set_alerts_push">Show Desktop Notifications</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div class="settings-col">
+            <!-- Feature 4: Assistant Personality (AI Tone) -->
+            <div class="settings-section" style="margin-bottom: 1.5rem;">
+              <h4 data-i18n="md_set_ai_title" style="margin-bottom: 0.75rem; color: var(--clr-primary); font-size: 1rem;">AI Persona</h4>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="settings-ai-tone" data-i18n="md_set_ai_tone_lbl" style="display: block; font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-sub);">Assistant Tone</label>
+                <select id="settings-ai-tone" style="width: 100%; padding: 0.75rem; border-radius: var(--r-md); background: var(--bg-card-solid); border: 1px solid var(--border-card); color: var(--text-main);">
+                  <option value="unrestricted" data-i18n="ai_tone_unrestricted">Unrestricted Assistant (Unfiltered & Helpful)</option>
+                  <option value="coach" data-i18n="ai_tone_coach">High-Performance Coach (Strict & Direct)</option>
+                  <option value="creative" data-i18n="ai_tone_creative">Creative Thinker (Brainstorming Partner)</option>
+                  <option value="casual" data-i18n="ai_tone_casual">Casual Friend (Relaxed & Conversational)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Feature 5: AI Data Reset (Memory & Chat History) -->
+            <div class="settings-section" style="margin-bottom: 1.5rem;">
+              <h4 data-i18n="md_set_data_title" style="margin-bottom: 0.75rem; color: var(--clr-primary); font-size: 1rem;">AI Memory & Data</h4>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <button type="button" id="btn-clear-memories" class="btn btn-secondary btn-block" style="text-align: left; padding: 0.6rem 1rem; border-radius: var(--r-md); font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+                  <span data-i18n="md_set_data_mem_btn">Clear Remembered Facts</span>
+                  <span style="opacity: 0.6;">&times;</span>
+                </button>
+                <button type="button" id="logout-btn" class="btn btn-danger btn-block" style="text-align: left; padding: 0.6rem 1rem; border-radius: var(--r-md); font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+                  <span data-i18n="nav_logout">Sign Out</span>
+                  <span>&rarr;</span>
+                </button>
+                <button type="button" id="btn-clear-chat-settings" class="btn btn-secondary btn-block" style="text-align: left; padding: 0.6rem 1rem; border-radius: var(--r-md); font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+                  <span data-i18n="md_set_data_chat_btn">Clear Conversation History</span>
+                  <span style="opacity: 0.6;">&times;</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- System Info -->
+            <div style="background: rgba(168,85,247,0.06); border: 1px solid var(--border-card); border-radius: var(--r-md); padding: 0.75rem 1rem; font-size: 0.8rem; color: var(--text-sub);">
+              <h5 data-i18n="md_set_sysinfo_title" style="margin: 0 0 0.4rem; color: var(--text-main); font-weight: 600;">System Info</h5>
+              <p style="margin: 0 0 0.2rem;">⚡ <strong data-i18n="sys_ai_brain">AI Brain</strong>: Gemini 2.5 Flash</p>
+              <p style="margin: 0;">⚡ <strong data-i18n="sys_memory_recall">Memory Recall</strong>: Active</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 1rem; border-top: 1px solid var(--border-subtle); padding-top: 1.25rem;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-settings')" data-i18n="md_task_btn_cancel">Cancel</button>
+          <button type="button" id="btn-save-settings" class="btn btn-primary" style="padding: 0.75rem 1.5rem;" data-i18n="md_set_btn_save">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOBAL CONFIRM MODAL -->
+  <div id="modal-confirm" class="modal-overlay hidden">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h3 data-i18n="md_conf_title">Confirm Action</h3>
+      </div>
+      <div class="modal-form">
+        <p id="confirm-message" data-i18n="logout_confirm_msg">Are you sure you want to proceed?</p>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="confirm-cancel-btn" data-i18n="md_conf_cancel">Cancel</button>
+          <button type="button" class="btn btn-danger" id="confirm-ok-btn" data-i18n="md_conf_ok">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI AUTO-SCHEDULING LOADING SCREEN -->
+  <div id="ai-loading-screen" class="modal-overlay hidden flex-center">
+    <div class="loading-card text-center">
+      <svg class="loading-brain-svg" viewBox="0 0 100 100" width="100" height="100">
+        <path d="M50,20 C40,20 30,30 30,45 C30,60 40,70 50,80 C60,70 70,60 70,45 C70,30 60,20 50,20 Z" fill="none" stroke="url(#logo-grad)" stroke-width="4" stroke-linecap="round" />
+        <circle cx="50" cy="45" r="10" fill="none" stroke="#ec4899" stroke-width="2" />
+        <line x1="50" y1="20" x2="50" y2="80" stroke="#a855f7" stroke-width="2" stroke-dasharray="4 4" />
+      </svg>
+      <h3 class="mt-4" data-i18n="ld_scheduling_title">TM with AI is Scheduling...</h3>
+      <p class="text-muted" data-i18n="ld_scheduling_sub">Optimizing time allocations, checking task priorities, and matching user habits...</p>
+    </div>
+  </div>
+
+
+
+  <!-- Scripts -->
+  <script src="app.js?v=3"></script>
+</body>
+</html>
