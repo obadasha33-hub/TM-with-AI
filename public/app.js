@@ -1684,10 +1684,13 @@ async function loadClerkSDK(publishableKey) {
     return;
   }
 
-  const loadScript = (src) => new Promise((resolve, reject) => {
+  const loadScript = (src, key) => new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = src;
     s.async = true;
+    s.crossOrigin = 'anonymous';
+    // Clerk v5+ requires data-clerk-publishable-key on the script tag
+    if (key) s.dataset.clerkPublishableKey = key;
     s.onload = resolve;
     s.onerror = (e) => reject(e);
     document.head.appendChild(s);
@@ -1716,7 +1719,7 @@ async function loadClerkSDK(publishableKey) {
   for (const url of sources) {
     try {
       console.log('[Clerk] Loading SDK from:', url);
-      await loadScript(url);
+      await loadScript(url, publishableKey);
       loaded = true;
       break;
     } catch (e) {
