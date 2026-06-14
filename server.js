@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const cwd = process.cwd();
 const dotenv = require('dotenv');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClerkClient, verifyToken } = require('@clerk/backend');
@@ -119,7 +120,7 @@ app.get('/dashboard', async (req, res) => {
         secretKey: process.env.CLERK_SECRET_KEY,
         publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
       });
-      return res.sendFile(path.join(__dirname, 'dashboard.html'));
+      return res.sendFile(path.join(cwd, 'dashboard.html'));
     } catch (err) {
       console.error('Clerk session verification failed on /dashboard:', err);
     }
@@ -131,14 +132,14 @@ app.get('/dashboard', async (req, res) => {
   // For Clerk-configured instances, the __session cookie is the gate.
   if (!process.env.CLERK_SECRET_KEY) {
     // No Clerk configured — serve dashboard.html and let client-side handle auth
-    return res.sendFile(path.join(__dirname, 'dashboard.html'));
+    return res.sendFile(path.join(cwd, 'dashboard.html'));
   }
 
   // Clerk is configured but no valid session — redirect to login
   res.redirect('/');
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(cwd, 'public')));
 
 // Authentication Middleware
 function authenticateToken(req, res, next) {

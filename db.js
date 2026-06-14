@@ -146,7 +146,7 @@ async function initDb() {
   if (!usePostgres) {
     const sqlite3 = require('sqlite3');
     const { open } = require('sqlite');
-    const dbPath = path.join(__dirname, 'database.db');
+    const dbPath = path.join(process.cwd(), 'database.db');
     db = await open({
       filename: dbPath,
       driver: sqlite3.Database
